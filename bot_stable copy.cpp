@@ -1,4 +1,8 @@
-#include<bits/stdc++.h>
+#include<algorithm>
+#include<utility>
+#include<sstream>
+#include<cmath>
+#include<vector>
 using namespace std;
 #include "usercode.h"
 
@@ -99,7 +103,7 @@ void logShit(Api *api){
     api->log(("vision: " + to_string(api->getSelfInfo()->sight_radius)).c_str());
 }
 
-float FlightModeDistanceThreshold = 150;
+float FlightModeDistanceThreshold = 0;
 
 bool isFlight(Api *api){
     const IpcSegmentInfo* segs = api->getSegments();
@@ -230,8 +234,8 @@ bool step(Api *api)
     // if(allahAkbar(api)){return 1;}
 
     if(isFlight(api)){
-        FlightModeDistanceThreshold = api->getServerConfig()->snake_turn_radius_factor * api->getSelfInfo()->segment_radius * 2;
-        FlightModeDistanceThreshold = max(FlightModeDistanceThreshold, 50.0f);
+        FlightModeDistanceThreshold = api->getServerConfig()->snake_turn_radius_factor * api->getSelfInfo()->segment_radius * 4;
+        FlightModeDistanceThreshold = max(FlightModeDistanceThreshold, 30.0f);
         api->log("in flight mode");
         flight(api);
     }else{
