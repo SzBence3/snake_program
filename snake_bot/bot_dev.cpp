@@ -71,7 +71,7 @@ food getFoodTarget_L(Api *api){
     return {0, 0, 0, 0, 0};
 }
 
-food getFoodTarget(Api *api){
+food getFoodTargetBetter(Api *api){
     int sight = api->getSelfInfo()->sight_radius;
     int consrad = api->getSelfInfo()->consume_radius;
     

@@ -127,7 +127,7 @@ pair<float, float> pos_of_first_seg(Api* api)
 }
 int const enoughSegmentCount = 4;
 
-bool isSecondSegment(Api* api)
+bool isEnoughSegment(Api* api)
 {
     const IpcSegmentInfo* segs = api->getSegments();
     for(int i=0;i<api->getSegmentCount();i++)
@@ -143,7 +143,7 @@ void ftarget(Api *api, float x, float y){
     // ss << ax << " " << ay <<  " " << x << " " << y  << " " << fordul(ax,ay, 0, 0, x,y);
     // api->log(ss.str().c_str());
     
-    api->angle = fordul(ax,ay, 0, 0, x,y) * api->getSelfInfo()->max_step_angle;
+    api->angle = -fordul(ax,ay, 0, 0, x,y) * api->getSelfInfo()->max_step_angle;
 }
 
 bool allahAkbar(Api*api){
@@ -171,6 +171,58 @@ void flight(Api *api){
     else api->angle=self->max_step_angle;
 }
 
+food getFoodTargetBetter(Api *api){
+    int sight = api->getSelfInfo()->sight_radius;
+    int consrad = api->getSelfInfo()->consume_radius;
+    
+    vector<vector<float>>v();
+    int n = sight/consrad;
+    float d = consrad*n;
+    vector<vector<float>>grid(n*2+1, vector<float>(2*n+1));
+    const food *foods = api->getFood();
+    int foodCount = api->getFoodCount();
+    for(int i = 0; i < foodCount; i++){
+        food f = foods[i];
+        int x = round(f.x/consrad);
+        int y = round(f.y/consrad);
+        x+=n;
+        y+=n;
+        if(x < 0 || x > 2*n || y < 0 || y > 2*n) continue;
+        grid[x][y]+=f.val;
+    }
+    food t = {0,0,0.0001,0,0};
+    for(int i = 0; i < 2*n+1; i++){
+        for(int j = 0; j < n*2+1; j++){
+            float x = (i-n)*consrad, y = (j-n)*consrad;
+
+            if(grid[i][j]/pow(x*x+y*y,0.5) > t.val && canGetPosition(api, x,y,0)){
+                t.x = x;
+                t.y = y;
+                t.val = grid[i][j]/pow(x*x+y*y,0.5);
+            }
+        }
+    }
+    /*string s;
+    for(auto v : grid){
+        s+="{";
+        for(float i : v){
+            s+=to_string(i)+",";
+        }
+        s+="},";
+    }
+    api->log(s.c_str());*/
+    if(t.x == 0 && t.y == 0)api->log("didnt find good pos");
+    
+    // t.dir = atan2(t.x, t.y);
+    // t.dir -= pi/2;
+    // t.dir += getFacingDir(api);
+    // while(t.dir < pi) t.dir += pi;
+    // while(t.dir > pi) t.dir -= pi;
+
+    return t;
+
+}
+
 
 bool step(Api *api)
 {
@@ -183,14 +235,14 @@ bool step(Api *api)
         api->log("in flight mode");
         flight(api);
     }else{
-        if(!isSecondSegment(api)){
+        if(!isEnoughSegment(api)){
 
             food foodtarget = getFoodTarget(api);
             target(api, foodtarget.x, foodtarget.y, foodtarget.dir);
             api->log(("(no second segment yet) Going for food: " + to_string(foodtarget)).c_str());
         }
         else {
-            food foodtarget = getFoodTarget(api);
+            food foodtarget = getFoodTargetBetter(api);
             ftarget(api, foodtarget.x, foodtarget.y);
             api->log(("Going for food: " + to_string(foodtarget)).c_str());
         }
