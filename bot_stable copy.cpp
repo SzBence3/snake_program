@@ -1,4 +1,5 @@
 #include<algorithm>
+#include<map>
 #include<utility>
 #include<sstream>
 #include<cmath>
@@ -6,6 +7,7 @@
 using namespace std;
 #include "usercode.h"
 
+map<int,string>botNames;
 bool init(Api *api)
 {
     api->clearColors();
@@ -16,6 +18,11 @@ bool init(Api *api)
     api->addColor(20, 128, 0);
     api->addColor(10,  64, 0);
     api->addColor(20, 128, 0);*/
+    auto b = api->getBots();
+    int bc = api->getBotCount();
+    for(int i = 0; i < bc; i ++){
+        botNames[b[i].bot_id] = b[i].bot_name;
+    }
 
     return true;
 }
@@ -108,7 +115,7 @@ float FlightModeDistanceThreshold = 0;
 bool isFlight(Api *api){
     const IpcSegmentInfo* segs = api->getSegments();
     for(int i=0;i<api->getSegmentCount();i++){
-        if(!segs[i].is_self && segs[i].dist - segs[i].r - api->getSelfInfo()->segment_radius <= FlightModeDistanceThreshold) return true;
+        if(!segs[i].is_self && segs[i].dist - segs[i].r*2 - api->getSelfInfo()->segment_radius <= FlightModeDistanceThreshold) return true;
     }
     return false;
 }
@@ -168,7 +175,11 @@ void flight(Api *api){
     const IpcSegmentInfo* segs = api->getSegments();
     int worst_segment=-1;
     for(int i=0;i<api->getSegmentCount();i++){
-        if(!segs[i].is_self && (worst_segment<0 || segs[i].dist-segs[i].r<segs[worst_segment].dist-segs[worst_segment].r)) worst_segment=i;
+        if(!segs[i].is_self && 
+            (worst_segment<0 || 
+            segs[i].dist-segs[i].r < segs[worst_segment].dist-segs[worst_segment].r)
+        ) 
+            worst_segment=i;
     }
     auto self = api->getSelfInfo();
     if(segs[worst_segment].dir>0) api->angle=-self->max_step_angle;
@@ -177,10 +188,10 @@ void flight(Api *api){
 
 food getFoodTargetBetter(Api *api){
     int sight = api->getSelfInfo()->sight_radius;
-    int consrad = api->getSelfInfo()->consume_radius;
+    int n = 30;
+    int consrad = sight/(n-2);
     
     vector<vector<float>>v();
-    int n = sight/consrad;
     float d = consrad*n;
     vector<vector<float>>grid(n*2+1, vector<float>(2*n+1));
     const food *foods = api->getFood();
@@ -227,15 +238,56 @@ food getFoodTargetBetter(Api *api){
 
 }
 
+struct Target{
+    float r, dist;
+    unsigned long long bot_id;
+    unsigned int bestidx;
+    float value;
+};
+
+Target getBestTarget(Api *api){
+    map<int,Target>mep;
+    auto segments = api->getSegments();
+    int segmentcount = api->getSegmentCount();
+    for(int i = 0; i < segmentcount; i++){
+        if(segments[i].is_self)continue;
+        if(!mep.count(segments[i].bot_id)){
+            mep[segments[i].bot_id] = {segments[i].r, segments[i].dist, segments[i].bot_id, segments[i].idx,0};
+        }else 
+        if(segments[i].idx < mep[segments[i].bot_id].bestidx){
+            mep[segments[i].bot_id] = {segments[i].r, segments[i].dist, segments[i].bot_id, segments[i].idx,0};
+        }
+    }
+    Target best = {0,0,0,0,0};
+    for(auto& [id, t] : mep){
+        t.value = t.r*(pow(1/(t.dist + t.r*t.bestidx), 0.5));
+        if(t.value > best.value)best = t;
+    }
+    return best;
+}
+
+string getName(Api *api, unsigned long long bot_id){
+    auto b = api->getBots();
+    int bc = api->getBotCount();
+    for(int i = 0; i < bc; i ++){
+        if(b[i].bot_id == bot_id)return b[i].bot_name;  
+        // botNames[b[i].bot_id] = b[i].bot_name;
+    }
+    return "UNKOWN";
+}
 
 bool step(Api *api)
 {
     
     // if(allahAkbar(api)){return 1;}
-
+    Target target1 = getBestTarget(api);
+    if(isEnoughSegment(api) ){
+        
+    }
+    api->log((getName(api, target1.bot_id) + "value: " + to_string(target1.value) + " bid: " + to_string(target1.bestidx) + " bot_id: "+ to_string(target1.bot_id)).c_str());
     if(isFlight(api)){
         FlightModeDistanceThreshold = api->getServerConfig()->snake_turn_radius_factor * api->getSelfInfo()->segment_radius * 4;
-        FlightModeDistanceThreshold = max(FlightModeDistanceThreshold, 30.0f);
+        FlightModeDistanceThreshold = max(FlightModeDistanceThreshold, 50.0f);
         api->log("in flight mode");
         flight(api);
     }else{
@@ -249,6 +301,7 @@ bool step(Api *api)
             food foodtarget = getFoodTargetBetter(api);
             ftarget(api, foodtarget.x, foodtarget.y);
             api->log(("Going for food: " + to_string(foodtarget)).c_str());
+
         }
     }
     logShit(api);
