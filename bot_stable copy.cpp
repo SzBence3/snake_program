@@ -85,7 +85,7 @@ float FlightModeDistanceThreshold = 0;
 bool isFlight(Api *api){
     const IpcSegmentInfo* segs = api->getSegments();
     for(int i=0;i<api->getSegmentCount();i++){
-        if(!segs[i].is_self && segs[i].dist - segs[i].r - api->getSelfInfo()->segment_radius <= FlightModeDistanceThreshold) return true;
+        if(!segs[i].is_self && segs[i].dist - segs[i].r- api->getSelfInfo()->segment_radius-20 <= FlightModeDistanceThreshold) return true;
     }
     return false;
 }
@@ -244,7 +244,7 @@ bool isSharpAttack(Api *api, Target t){
     float a = 1/sqrt(dx*dx+dy*dy);
     dx*=a;
     dy*=a;
-    for(float b = 40; b < maxAhead; b+=20){
+    for(float b = f.r+40; b < maxAhead; b+=10){
         float tx = f.x+dx*b;
         float ty = f.y+dy*b;
         if(isAhead(api, tx,ty) && dists(tx,ty,0,0)*1.5*1.5 < dists(tx,ty, f.x,f.y)){
@@ -296,7 +296,7 @@ bool step(Api *api)
     }
     else target1 = {0,0,0,0,0};
     if(isFlight(api)){
-        FlightModeDistanceThreshold = (api->getServerConfig()->snake_turn_radius_factor+1.0f) * api->getSelfInfo()->segment_radius * 2;
+        FlightModeDistanceThreshold = (api->getServerConfig()->snake_turn_radius_factor+1.0f) * api->getSelfInfo()->segment_radius * 4;
         FlightModeDistanceThreshold = max(FlightModeDistanceThreshold, 20.0f);
         api->log("in flight mode");
         flight(api);
