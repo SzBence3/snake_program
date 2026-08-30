@@ -7,6 +7,9 @@
 using namespace std;
 #include "usercode.h"
 
+map<unsigned long long, vector<IpcSegmentInfo>>segments;
+int my_id = 0;
+
 map<int,string>botNames;
 bool init(Api *api)
 {
@@ -101,7 +104,7 @@ void target(Api *api, float x, float y, int dir){
 }
 
 string to_string(food f){
-    auto [x,y,dir,dist, value] = f;
+    auto [x,y,value,dir,dist] = f;
     return "x: "+ to_string(x) + " y: "+ to_string(y) +" dir: "+ to_string(dir) +" dist: "+ to_string(dist) + " value: " + to_string(value);
 }
 
@@ -115,7 +118,7 @@ float FlightModeDistanceThreshold = 0;
 bool isFlight(Api *api){
     const IpcSegmentInfo* segs = api->getSegments();
     for(int i=0;i<api->getSegmentCount();i++){
-        if(!segs[i].is_self && segs[i].dist - segs[i].r*2 - api->getSelfInfo()->segment_radius <= FlightModeDistanceThreshold) return true;
+        if(!segs[i].is_self && segs[i].dist - segs[i].r - api->getSelfInfo()->segment_radius <= FlightModeDistanceThreshold) return true;
     }
     return false;
 }
@@ -128,13 +131,9 @@ int fordul(float x1, float y1, float x2, float y2, float x3, float y3)
     return 0;
 }
 
-pair<float, float> pos_of_first_seg(Api* api)
+pair<float, float> pos_of_second_seg(Api* api)
 {
-    auto self = api->getSelfInfo();
-    const IpcSegmentInfo* segs = api->getSegments();
-    for(int i=0;i<api->getSegmentCount();i++)
-        if(segs[i].is_self && segs[i].idx==1) return {segs[i].x,segs[i].y};
-    
+    return {segments[my_id][1].x, segments[my_id][1].y};
 }
 int const enoughSegmentCount = 4;
 
@@ -148,7 +147,7 @@ bool isEnoughSegment(Api* api)
 }
 
 void ftarget(Api *api, float x, float y){
-    auto [ax,ay] = pos_of_first_seg(api);
+    auto [ax,ay] = pos_of_second_seg(api);
 
     // stringstream ss;
     // ss << ax << " " << ay <<  " " << x << " " << y  << " " << fordul(ax,ay, 0, 0, x,y);
@@ -267,27 +266,92 @@ Target getBestTarget(Api *api){
 }
 
 string getName(Api *api, unsigned long long bot_id){
+    if(botNames.count(bot_id))return botNames[bot_id];
     auto b = api->getBots();
     int bc = api->getBotCount();
     for(int i = 0; i < bc; i ++){
-        if(b[i].bot_id == bot_id)return b[i].bot_name;  
+        if(b[i].bot_id == bot_id)return botNames[bot_id] = b[i].bot_name;  
         // botNames[b[i].bot_id] = b[i].bot_name;
     }
     return "UNKOWN";
 }
 
+pair<IpcSegmentInfo, IpcSegmentInfo> getFirstSegments(Api *api, unsigned long long bot_id){
+    return {segments[bot_id][0], segments[bot_id][1]};
+}
+
+float const maxAhead = 500;
+
+float dists(float x, float y, float ax, float ay){
+    return (x-ax)*(x-ax)+(y-ay)*(y-ay);
+}
+
+bool isAhead(Api *api, float x, float y){
+    auto [sx, sy] = pos_of_second_seg(api);
+    return dists(x,y,sx,sy) > dists(x,y,0,0);
+}
+
+bool isSharpAttack(Api *api, Target t){
+    if(t.bestidx != 0)return 0;
+    auto [f,s] = getFirstSegments(api,t.bot_id);
+    float dx = f.x-s.x, dy = f.y-s.y;
+    float a = 1/sqrt(dx*dx+dy*dy);
+    dx*=a;
+    dy*=a;
+    for(float b = 40; b < maxAhead; b+=20){
+        float tx = f.x+dx*b;
+        float ty = f.y+dy*b;
+        if(isAhead(api, tx,ty) && dists(tx,ty,0,0)*1.5*1.5 < dists(tx,ty, f.x,f.y)){
+            api->log(("sharp attack on " + getName(api, t.bot_id) + " at " + to_string(tx) + " " + to_string(ty) + " ahead by " + to_string(b)).c_str());
+            api->boost = 1;
+            ftarget(api, tx,ty);
+            return 1;
+        }
+    }
+    return 0;
+}
+void getData(Api* api){
+    auto s = api->getSegments();
+    int sc = api->getSegmentCount();
+    segments.clear();
+    for(int i = 0; i < sc; i++){
+        segments[s[i].bot_id].push_back(s[i]);
+        if(s[i].is_self)my_id = s[i].bot_id;
+    }
+    for(auto& [id, segs] : segments){
+        sort(segs.begin(), segs.end(), [](IpcSegmentInfo a, IpcSegmentInfo b){
+            return a.idx < b.idx;
+        });
+    }
+}
+
+pair<float,float> getGoodTargetPos(Api *api, Target t){
+    auto [f,s] = getFirstSegments(api,t.bot_id);
+    float dx = f.x-s.x, dy = f.y-s.y;
+    float a = 1/sqrt(dx*dx+dy*dy);
+    dx*=a;
+    dy*=a;
+    return {f.x+dx*5*f.r, f.y+dy*5*f.r};
+}
+
+
 bool step(Api *api)
 {
-    
+    getData(api);
+    api->boost = 0;
     // if(allahAkbar(api)){return 1;}
     Target target1 = getBestTarget(api);
-    if(isEnoughSegment(api) ){
-        
+    // api->log((getName(api, target1.bot_id) + "value: " + to_string(target1.value) + " bid: " + to_string(target1.bestidx) + " bot_id: "+ to_string(target1.bot_id)).c_str());
+    if(isEnoughSegment(api) && target1.value > 0.8f){
+        if(isSharpAttack(api, target1)){
+            //sharpAttack(api, target1);
+            return 1;
+        }
     }
-    api->log((getName(api, target1.bot_id) + "value: " + to_string(target1.value) + " bid: " + to_string(target1.bestidx) + " bot_id: "+ to_string(target1.bot_id)).c_str());
+    else target1 = {0,0,0,0,0};
     if(isFlight(api)){
-        FlightModeDistanceThreshold = api->getServerConfig()->snake_turn_radius_factor * api->getSelfInfo()->segment_radius * 4;
-        FlightModeDistanceThreshold = max(FlightModeDistanceThreshold, 50.0f);
+        FlightModeDistanceThreshold = (api->getServerConfig()->snake_turn_radius_factor+1.0f) * api->getSelfInfo()->segment_radius * 2;
+        FlightModeDistanceThreshold = max(FlightModeDistanceThreshold, 20.0f);
         api->log("in flight mode");
         flight(api);
     }else{
@@ -299,8 +363,17 @@ bool step(Api *api)
         }
         else {
             food foodtarget = getFoodTargetBetter(api);
+            if(foodtarget.val/api->getSelfInfo()->sight_radius < 0.0007 && target1.value > 1.0f){
+                api->log(("Going for target: " + getName(api, target1.bot_id) + " value: " + to_string(target1.value)).c_str());
+                auto [f,s] = getFirstSegments(api,target1.bot_id);
+                auto [x,y] = getGoodTargetPos(api, target1);
+                ftarget(api, x,y);
+                return 1;
+            }
+
             ftarget(api, foodtarget.x, foodtarget.y);
-            api->log(("Going for food: " + to_string(foodtarget)).c_str());
+            if(api->getSelfInfo()->mass < 5000 && foodtarget.val/api->getSelfInfo()->sight_radius > 0.001)api->boost = 1;
+            api->log(("Going for food: " + to_string(foodtarget.val/api->getSelfInfo()->sight_radius)).c_str());
 
         }
     }

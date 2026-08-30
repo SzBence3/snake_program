@@ -29,7 +29,7 @@ float getFacingDir(Api* api){ // prob needs to be negatived
     float angleSnakeAndY = angleFoodAndY - someFood.dir;
     return angleSnakeAndY;
 }
-pair<int, int> pos_of_first_seg(Api* api)
+pair<int, int> pos_of_second_seg(Api* api)
 {
     auto self = api->getSelfInfo();
     const IpcSegmentInfo* segs = api->getSegments();
@@ -137,7 +137,7 @@ void target(Api *api, float x, float y, int dir){
 
 
 void ftarget(Api* api, float x, float y){
-    auto [sx, sy] = pos_of_first_seg(api);
+    auto [sx, sy] = pos_of_second_seg(api);
     api->angle  = -fordul(sx,sy, 0,0, x,y) * api->getServerConfig()->snake_turn_radius_factor* api->getSelfInfo()->segment_radius;
 }
 
