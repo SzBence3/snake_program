@@ -10,6 +10,8 @@ using namespace std;
 map<unsigned long long, vector<IpcSegmentInfo>>segments;
 int my_id = 0;
 
+string lastMode, curMode, extraInfo;
+
 map<int,string>botNames;
 bool init(Api *api)
 {
@@ -248,7 +250,9 @@ bool isSharpAttack(Api *api, Target t){
         float tx = f.x+dx*b;
         float ty = f.y+dy*b;
         if(isAhead(api, tx,ty) && dists(tx,ty,0,0)*1.5*1.5 < dists(tx,ty, f.x,f.y)){
-            api->log(("sharp attack on " + getName(api, t.bot_id) + " at " + to_string(tx) + " " + to_string(ty) + " ahead by " + to_string(b)).c_str());
+            //api->log(("sharp attack on " + getName(api, t.bot_id) + " at " + to_string(tx) + " " + to_string(ty) + " ahead by " + to_string(b)).c_str());
+            curMode = "sharp attack: " + getName(api, t.bot_id);
+            extraInfo = ", ahead by: " + to_string(b);
             api->boost = 1;
             ftarget(api, tx,ty);
             return 1;
@@ -281,8 +285,10 @@ pair<float,float> getGoodTargetPos(Api *api, Target t){
 }
 
 
+
 bool step(Api *api)
 {
+    lastMode = curMode;
     getData(api);
     api->boost = 0;
     // if(allahAkbar(api)){return 1;}
@@ -298,19 +304,22 @@ bool step(Api *api)
     if(isFlight(api)){
         FlightModeDistanceThreshold = (api->getServerConfig()->snake_turn_radius_factor+1.0f) * api->getSelfInfo()->segment_radius * 4;
         FlightModeDistanceThreshold = max(FlightModeDistanceThreshold, 20.0f);
-        api->log("in flight mode");
+        //api->log("in flight mode");
+        curMode = "Flight"; extraInfo = "";
         flight(api);
     }else{
         if(!isEnoughSegment(api)){
 
             food foodtarget = getFoodTarget(api);
             target(api, foodtarget.x, foodtarget.y, foodtarget.dir);
-            api->log(("(no second segment yet) Going for food: " + to_string(foodtarget)).c_str());
+            //api->log(("(no second segment yet) Going for food: " + to_string(foodtarget)).c_str());
+            curMode = "initial eating"; extraInfo="";
         }
         else {
             food foodtarget = getFoodTargetBetter(api);
             if(foodtarget.val/api->getSelfInfo()->sight_radius < 0.0007 && target1.value > 1.0f){
-                api->log(("Going for target: " + getName(api, target1.bot_id) + " value: " + to_string(target1.value)).c_str());
+                //api->log(("Going for target: " + getName(api, target1.bot_id) + " value: " + to_string(target1.value)).c_str());
+                curMode = "Attacking " + getName(api, target1.bot_id); extraInfo=", target value: " + to_string(target1.value);
                 auto [f,s] = getFirstSegments(api,target1.bot_id);
                 auto [x,y] = getGoodTargetPos(api, target1);
                 ftarget(api, x,y);
@@ -319,9 +328,12 @@ bool step(Api *api)
 
             ftarget(api, foodtarget.x, foodtarget.y);
             if(api->getSelfInfo()->mass < 5000 && foodtarget.val/api->getSelfInfo()->sight_radius > 0.001)api->boost = 1;
-            api->log(("Going for food: " + to_string(foodtarget.val/api->getSelfInfo()->sight_radius)).c_str());
-
+            //api->log(("Going for food: " + to_string(foodtarget.val/api->getSelfInfo()->sight_radius)).c_str());
+            curMode = "Eating";extraInfo="";
         }
+    }
+    if(lastMode != curMode){
+        api->log(("new mode: " + curMode + extraInfo).c_str());
     }
     return true;
 }
