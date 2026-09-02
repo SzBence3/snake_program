@@ -228,7 +228,7 @@ pair<IpcSegmentInfo, IpcSegmentInfo> getFirstSegments(Api *api, unsigned long lo
     return {segments[bot_id][0], segments[bot_id][1]};
 }
 
-float const maxAhead = 500;
+float const maxAhead = 1000;
 
 float dists(float x, float y, float ax, float ay){
     return (x-ax)*(x-ax)+(y-ay)*(y-ay);
@@ -246,7 +246,7 @@ bool isSharpAttack(Api *api, Target t){
     float a = 1/sqrt(dx*dx+dy*dy);
     dx*=a;
     dy*=a;
-    for(float b = f.r+40; b < maxAhead; b+=10){
+    for(float b = f.r+api->getSelfInfo()->segment_radius+40; b < maxAhead; b+=10){
         float tx = f.x+dx*b;
         float ty = f.y+dy*b;
         if(isAhead(api, tx,ty) && dists(tx,ty,0,0)*1.5*1.5 < dists(tx,ty, f.x,f.y)){
